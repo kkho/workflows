@@ -188,7 +188,7 @@ jobs:
           provenance: false
       - name: Slack message
         if: ${{ success() && inputs.push-image }}
-        uses: workflows/workflows/.github/workflows/slack-message/action.yaml@main
+        uses: kkho/workflows/.github/workflows/slack-message/action.yaml@main
         with:
           slack-webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
           channel: "#build-${{ inputs.environment }}"
