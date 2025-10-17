@@ -1,0 +1,193 @@
+name: Reusable build
+
+on:
+  workflow_call:
+    inputs:
+      app_name:
+        description: "Application name"
+        required: true
+        type: string
+      system_name:
+        description: "System name"
+        required: true
+        type: string
+      environment:
+        description: "Deployment environment (e.g., dev, test, prod)"
+        required: true
+        type: string
+      solution_name:
+        description: "Solution name"
+        required: false
+        default: "Conferenti.sln"
+        type: string
+      docker-build-context:
+        description: "Build context"
+        required: false
+        default: "./"
+        type: string
+      container_registry:
+        description: "Container registry URL"
+        required: false
+        default: "ghcr.io"
+        type: string
+      dockerfile:
+        description: "Path to Dockerfile"
+        required: false
+        default: "Dockerfile"
+        type: string
+      tags:
+        description: "Image tags (comma-separated)"
+        required: true
+        type: string
+      push-image:
+        description: "Push the image to the registry"
+        required: false
+        default: true
+        type: boolean
+      build-args:
+        description: "Build arguments (key=value, comma-separated)"
+        required: false
+        type: string
+      version:
+        required: false
+        type: string
+        description: "Semantic version"
+      coverage_file_path:
+        description: "Path to the code coverage file"
+        required: false
+        default: "./target/site/coverage.cobertura.xml"
+        type: string
+      dotnet_version:
+        description: "Version of .NET to use"
+        required: false
+        default: "9.x"
+        type: string
+    secrets:
+      GH_TOKEN:
+        description: "GitHub token"
+        required: true
+      CODECOV_TOKEN:
+        description: "Code coverage access token"
+        required: false
+      SLACK_API_TOKEN:
+        description: "Slack API token"
+        required: false
+      SLACK_WEBHOOK_URL:
+        description: "Slack Webhook URL secret"
+        required: false
+
+jobs:
+  build:
+    name: Build, test, publish ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check required inputs
+        run: |
+          # Explicit checks for required inputs, due to https://github.com/actions/runner/issues/1070
+          [[ "${{ inputs.app_name }}" ]] || { echo "Parameter 'app_name' is required, but is empty." ; exit 1; }
+          [[ "${{ inputs.system_name }}" ]] || { echo "Parameter 'system_name' is required, but is empty." ; exit 1; }
+          [[ "${{ inputs.environment }}" ]] || { echo "Parameter 'environment' is required, but is empty." ; exit 1; }
+          [[ "${{ inputs.tags }}" ]] || { echo "Parameter 'tags' is required, but is empty." ; exit 1; }
+        shell: bash
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          repository: ${{ github.repository }}
+          token: ${{ secrets.GH_TOKEN }}
+
+      - name: Lowercase repository name
+        run: |
+          echo "REPO=${GITHUB_REPOSITORY@L}" >> $GITHUB_ENV
+
+      - name: Get federated token for Azure
+        shell: bash
+        id: get-federated-token
+        if: ${{ contains(inputs.container_registry, 'azurecr.io') || inputs.container_registry == '' }}
+        run: |
+          # Get federated token for Azure
+          token=$(curl -s -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=api://AzureADTokenExchange" | jq -r '.value')
+          echo "::add-mask::$token"
+          echo "token=$token" >> "$GITHUB_OUTPUT"
+
+      - name: Login to Azure with federated token
+        if: ${{ contains(inputs.container_registry, 'azurecr.io') || inputs.container_registry == '' }}
+        run: |
+          az login --service-principal \
+            --username ${{ secrets.AZURE_CLIENT_ID }} \
+            --tenant ${{ secrets.AZURE_TENANT_ID }} \
+            --federated-token ${{ steps.get-federated-token.outputs.token }}
+
+      - name: Login to Azure Container Registry
+        if: ${{ contains(inputs.container_registry, 'azurecr.io') || inputs.container_registry == '' }}
+        run: |
+          REGISTRY_NAME=$(echo "${{ inputs.container_registry }}" | cut -d'.' -f1)
+          az acr login --name $REGISTRY_NAME
+
+      - name: Login to GHCR
+        if: ${{ contains(inputs.container_registry, 'ghcr.io') }}
+        uses: docker/login-action@v3
+        with:
+          registry: "ghcr.io"
+          username: ${{ github.actor }}
+          password: ${{ secrets.GH_TOKEN }}
+
+      - name: Create image name
+        run: |
+          IMAGE_NAME="${{ inputs.container_registry }}/${{ inputs.system_name }}${{ inputs.app_name }}-${{ inputs.environment }}"
+          echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ inputs.dotnet_version }}
+      - name: Run tests and generate coverage
+        run: dotnet test ${{ inputs.solution_name}} --configuration Release /p:CollectCoverage=true /p:CoverletOutputFormat=cobertura
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: ${{ inputs.coverage_file_path }}
+          fail_ci_if_error: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Set meta_flavor environment variable
+        run: |
+          if [[ "${{ inputs.environment }}" == "prod" ]]; then
+            echo "meta_flavor=true" >> $GITHUB_ENV
+            echo "image_tag=latest" >> $GITHUB_ENV
+          else
+            echo "meta_flavor=false" >> $GITHUB_ENV
+            echo "image_tag=${{ inputs.environment }}_latest" >> $GITHUB_ENV
+          fi
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          flavor: |
+            latest=${{ env.meta_flavor }}
+          tags: |
+            type=raw,value=${{ env.image_tag }}
+            type=raw,value=${{ github.sha }},priority=1000
+            type=semver,pattern={{version}},value=${{ inputs.version }},enable=${{ inputs.version != '' }}
+            type=ref,event=branch
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ inputs.docker-build-context }}
+          file: ${{ inputs.dockerfile }}
+          tags: ${{ inputs.tags }}
+          push: ${{ inputs.push-image }}
+          build-args: ${{ inputs.build-args }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha, mode=max
+          provenance: false
+      - name: Slack message
+        if: ${{ success() && inputs.push-image }}
+        uses: workflows/workflows/.github/workflows/slack-message/action.yaml@main
+        with:
+          slack-webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          channel: "#build-${{ inputs.environment }}"
+          message: "Docker image for ${{ inputs.app_name }} in ${{ inputs.environment }} has been built and pushed successfully."
