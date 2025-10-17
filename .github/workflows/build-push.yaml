@@ -60,7 +60,6 @@ on:
       dotnet_version:
         description: "Version of .NET to use"
         required: false
-        default: "9.x"
         type: string
     secrets:
       GH_TOKEN:
@@ -141,9 +140,11 @@ jobs:
         with:
           dotnet-version: ${{ inputs.dotnet_version }}
       - name: Run tests and generate coverage
+        if: ${{ inputs.dotnet_version }}
         run: dotnet test ${{ inputs.solution_name}} --configuration Release /p:CollectCoverage=true /p:CoverletOutputFormat=cobertura
 
       - name: Upload coverage to Codecov
+        if: ${{ inputs.dotnet_version }}
         uses: codecov/codecov-action@v5
         with:
           files: ${{ inputs.coverage_file_path }}
