@@ -137,6 +137,7 @@ jobs:
           echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
 
       - uses: actions/setup-dotnet@v4
+        if: ${{ inputs.dotnet_version }}
         with:
           dotnet-version: ${{ inputs.dotnet_version }}
       - name: Run tests and generate coverage
