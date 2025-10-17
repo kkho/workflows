@@ -178,7 +178,7 @@ runs:
 
     - name: Slack notification
       if: ${{ inputs.slack_webhook_url }}
-      uses: kkho/workflows/.github/workflows/slack-message@main
+      uses: kkho/workflows/slack-message@main
       with:
         slack-webhook-url: ${{ inputs.slack_webhook_url }}
         channel: "#build-${{ inputs.environment }}"
