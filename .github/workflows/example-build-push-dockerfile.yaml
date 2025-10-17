@@ -1,0 +1,145 @@
+name: Example - Build and Push Docker Images
+
+on:
+  push:
+    branches: ["main", "develop"]
+    tags: ["v*"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment to deploy to"
+        required: true
+        default: "dev"
+        type: choice
+        options:
+          - dev
+          - test
+          - prod
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build-matrix:
+    name: Generate build matrix
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Set matrix based on event
+        id: set-matrix
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            # Manual trigger - use specified environment
+            ENVIRONMENT="${{ github.event.inputs.environment }}"
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            # Tag push - production
+            ENVIRONMENT="prod"
+          elif [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            # Main branch - test
+            ENVIRONMENT="test"
+          else
+            # Other branches - dev
+            ENVIRONMENT="dev"
+          fi
+
+          # Define matrix based on environment
+          case $ENVIRONMENT in
+            "prod")
+              MATRIX='{"include":[
+                {"app_name":"frontend","system_name":"mycompany","environment":"prod","container_registry":"ghcr.io"},
+                {"app_name":"backend","system_name":"mycompany","environment":"prod","container_registry":"ghcr.io"}
+              ]}'
+              ;;
+            "test")
+              MATRIX='{"include":[
+                {"app_name":"frontend","system_name":"mycompany","environment":"test","container_registry":"ghcr.io"},
+                {"app_name":"backend","system_name":"mycompany","environment":"test","container_registry":"ghcr.io"}
+              ]}'
+              ;;
+            *)
+              MATRIX='{"include":[
+                {"app_name":"frontend","system_name":"mycompany","environment":"dev","container_registry":"ghcr.io"}
+              ]}'
+              ;;
+          esac
+
+          echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
+          echo "Generated matrix for environment: $ENVIRONMENT"
+          echo "$MATRIX"
+
+  build-and-push:
+    name: Build & Push
+    needs: build-matrix
+    strategy:
+      matrix: ${{ fromJson(needs.build-matrix.outputs.matrix) }}
+      fail-fast: false
+    uses: ./.github/workflows/build-push.yaml
+    with:
+      app_name: ${{ matrix.app_name }}
+      system_name: ${{ matrix.system_name }}
+      environment: ${{ matrix.environment }}
+      solution_name: "Conferenti.sln"
+      docker-build-context: "./"
+      container_registry: ${{ matrix.container_registry }}
+      dockerfile: "Dockerfile.example"
+      tags: ${{ matrix.container_registry }}/${{ matrix.system_name }}/${{ matrix.app_name }}-${{ matrix.environment }}:${{ github.sha }},${{ matrix.container_registry }}/${{ matrix.system_name }}/${{ matrix.app_name }}-${{ matrix.environment }}:${{ matrix.environment == 'prod' && 'latest' || format('{0}_latest', matrix.environment) }}
+      push-image: true
+      build-args: |
+        BUILDKIT_INLINE_CACHE=1
+        NODE_ENV=production
+        APP_VERSION=${{ github.sha }}
+        ENVIRONMENT=${{ matrix.environment }}
+      version: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+      coverage_file_path: "./target/site/coverage.cobertura.xml"
+      dotnet_version: "8.0.x"
+    secrets:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  notify-completion:
+    name: Notify build completion
+    needs: [build-matrix, build-and-push]
+    if: always() && contains(needs.*.result, 'success')
+    uses: ./.github/workflows/slack-message.yaml
+    with:
+      channel: "#deployments"
+      message: |
+        🚀 **Build Pipeline Completed Successfully**
+
+        **Repository:** ${{ github.repository }}
+        **Trigger:** ${{ github.event_name }}
+        **Branch/Tag:** ${{ github.ref_name }}
+        **Commit:** ${{ github.sha }}
+        **Actor:** ${{ github.actor }}
+
+        All Docker images have been built and pushed successfully!
+      color: "good"
+    secrets:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  notify-failure:
+    name: Notify build failure
+    needs: [build-matrix, build-and-push]
+    if: always() && contains(needs.*.result, 'failure')
+    uses: ./.github/workflows/slack-message.yaml
+    with:
+      channel: "#deployments"
+      message: |
+        ❌ **Build Pipeline Failed**
+
+        **Repository:** ${{ github.repository }}
+        **Trigger:** ${{ github.event_name }}
+        **Branch/Tag:** ${{ github.ref_name }}
+        **Commit:** ${{ github.sha }}
+        **Actor:** ${{ github.actor }}
+
+        Please check the workflow logs for more details.
+      color: "danger"
+    secrets:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

@@ -1,0 +1,73 @@
+﻿name: Reusable Slack Message
+
+on:
+  workflow_call:
+    inputs:
+      channel:
+        description: "Slack channel to send message to"
+        required: true
+        type: string
+      message:
+        description: "Message to send"
+        required: true
+        type: string
+      username:
+        description: "Username to display"
+        required: false
+        default: "GitHub Actions"
+        type: string
+      icon_emoji:
+        description: "Emoji icon to use"
+        required: false
+        default: ":github:"
+        type: string
+      color:
+        description: "Message color (good, warning, danger, or hex color)"
+        required: false
+        default: "good"
+        type: string
+    secrets:
+      SLACK_WEBHOOK_URL:
+        description: "Slack webhook URL"
+        required: true
+
+jobs:
+  send-slack-message:
+    name: Send Slack notification
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate inputs
+        run: |
+          # Check required inputs
+          [[ "${{ inputs.channel }}" ]] || { echo "Parameter 'channel' is required, but is empty." ; exit 1; }
+          [[ "${{ inputs.message }}" ]] || { echo "Parameter 'message' is required, but is empty." ; exit 1; }
+          [[ "${{ secrets.SLACK_WEBHOOK_URL }}" ]] || { echo "Secret 'SLACK_WEBHOOK_URL' is required, but is empty." ; exit 1; }
+        shell: bash
+
+      - name: Send Slack notification
+        run: |
+          # Escape special characters in the message
+          MESSAGE=$(echo '${{ inputs.message }}' | sed 's/"/\\"/g' | sed 's/\\/\\\\/g')
+
+          # Create JSON payload
+          PAYLOAD=$(cat <<EOF
+          {
+            "channel": "${{ inputs.channel }}",
+            "username": "${{ inputs.username }}",
+            "icon_emoji": "${{ inputs.icon_emoji }}",
+            "attachments": [
+              {
+                "color": "${{ inputs.color }}",
+                "text": "${MESSAGE}",
+                "mrkdwn_in": ["text"]
+              }
+            ]
+          }
+          EOF
+          )
+
+          # Send to Slack
+          curl -X POST -H 'Content-type: application/json' \
+            --data "${PAYLOAD}" \
+            "${{ secrets.SLACK_WEBHOOK_URL }}"
+        shell: bash

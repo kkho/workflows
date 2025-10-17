@@ -1,14 +1,13 @@
-# GitHub Actions Workflows
+# GitHub Actions Reusable Workflows
 
-A collection of reusable GitHub Actions workflows and composite actions for streamlined CI/CD processes.
+A collection of reusable GitHub Actions workflows for streamlined CI/CD processes.
 
 ## 📋 Table of Contents
 
 - [Overview](#overview)
-- [Workflows](#workflows)
+- [Reusable Workflows](#reusable-workflows)
   - [Build & Push Workflow](#build--push-workflow)
-- [Actions](#actions)
-  - [Slack Message Action](#slack-message-action)
+  - [Slack Message Workflow](#slack-message-workflow)
 - [Prerequisites](#prerequisites)
 - [Usage Examples](#usage-examples)
 - [Contributing](#contributing)
@@ -16,15 +15,15 @@ A collection of reusable GitHub Actions workflows and composite actions for stre
 
 ## 🔍 Overview
 
-This repository contains reusable GitHub Actions workflows and composite actions designed to standardize and simplify CI/CD processes across multiple projects. The workflows support:
+This repository contains reusable GitHub Actions workflows designed to standardize and simplify CI/CD processes across multiple projects. The workflows support:
 
-- 🐳 Docker image building and pushing to Azure Container Registry
+- 🐳 Docker image building and pushing to Azure Container Registry and GHCR
 - 🧪 .NET application testing and code coverage
 - 📊 Integration with Codecov for coverage reporting
 - 💬 Slack notifications for build status
 - 🔐 Azure authentication using OIDC/Federated Identity
 
-## 🚀 Workflows
+## 🚀 Reusable Workflows
 
 ### Build & Push Workflow
 
@@ -71,22 +70,35 @@ A comprehensive reusable workflow that builds .NET applications, runs tests, gen
 | `CODECOV_TOKEN`     | Codecov access token                | ❌       |
 | `SLACK_WEBHOOK_URL` | Slack webhook URL for notifications | ❌       |
 
-## 🔧 Actions
+### Slack Message Workflow
 
-### Slack Message Action
+**File:** `.github/workflows/slack-message.yaml`
 
-**File:** `.github/workflows/slack-message/action.yaml`
+A reusable workflow for sending messages to Slack channels using webhooks.
 
-A composite action for sending messages to Slack channels using webhooks.
+#### Features
+
+- ✅ Input validation and error handling
+- 🎨 Customizable message formatting
+- 🌈 Color-coded messages (good, warning, danger, or custom hex)
+- 📱 Channel targeting
+- 🤖 Custom username and icon support
 
 #### Inputs
 
-| Input               | Description       | Required |
+| Input        | Description                                   | Required | Default        |
+| ------------ | --------------------------------------------- | -------- | -------------- |
+| `channel`    | Slack channel to send message to              | ✅       | -              |
+| `message`    | Message to send                               | ✅       | -              |
+| `username`   | Username to display                           | ❌       | GitHub Actions |
+| `icon_emoji` | Emoji icon to use                             | ❌       | :github:       |
+| `color`      | Message color (good, warning, danger, or hex) | ❌       | good           |
+
+#### Secrets
+
+| Secret              | Description       | Required |
 | ------------------- | ----------------- | -------- |
-| `slack-webhook-url` | Slack Webhook URL | ✅       |
-| `message`           | Message to send   | ✅       |
-| `channel`           | Slack channel     | ✅       |
-| `username`          | Display username  | ❌       |
+| `SLACK_WEBHOOK_URL` | Slack webhook URL | ✅       |
 
 ## 📋 Prerequisites
 
@@ -126,6 +138,62 @@ Configure the following secrets in your repository:
 
 ## 📖 Usage Examples
 
+### 🔗 Cross-Repository Usage
+
+To use these reusable workflows from **another repository**, reference them using the full repository path:
+
+```yaml
+# In your project's .github/workflows/deploy.yaml
+name: Build and Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    # Reference the reusable workflow from this repository
+    uses: kkho/workflows/.github/workflows/build-push.yaml@main
+    with:
+      app_name: "my-application"
+      system_name: "my-system"
+      environment: "prod"
+      container_registry: "ghcr.io"
+      tags: "ghcr.io/my-system/my-application:latest"
+      dockerfile: "Dockerfile"
+      dotnet_version: "8.0.x"
+    secrets:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  notify:
+    needs: build
+    if: always()
+    uses: kkho/workflows/.github/workflows/slack-message.yaml@main
+    with:
+      channel: "#deployments"
+      message: |
+        Build completed for ${{ github.repository }}
+        Status: ${{ needs.build.result == 'success' && '✅ Success' || '❌ Failed' }}
+        Commit: ${{ github.sha }}
+      color: ${{ needs.build.result == 'success' && 'good' || 'danger' }}
+    secrets:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+```
+
+### 🏷️ Version Pinning
+
+For production use, pin to a specific version instead of `@main`:
+
+```yaml
+uses: kkho/workflows/.github/workflows/build-push.yaml@v1.2.3
+# or use a commit SHA
+uses: kkho/workflows/.github/workflows/build-push.yaml@abc123
+```
+
 ### Basic Usage
 
 ```yaml
@@ -137,7 +205,7 @@ on:
 
 jobs:
   build:
-    uses: your-org/workflows/.github/workflows/build-push.yaml@main
+    uses: kkho/workflows/.github/workflows/build-push.yaml@main
     with:
       app_name: "my-api"
       system_name: "payment"
@@ -165,7 +233,7 @@ on:
 jobs:
   build-dev:
     if: github.ref == 'refs/heads/develop'
-    uses: your-org/workflows/.github/workflows/build-push.yaml@main
+    uses: kkho/workflows/.github/workflows/build-push.yaml@main
     with:
       app_name: "my-api"
       system_name: "payment"
@@ -179,7 +247,7 @@ jobs:
 
   build-prod:
     if: github.ref == 'refs/heads/main'
-    uses: your-org/workflows/.github/workflows/build-push.yaml@main
+    uses: kkho/workflows/.github/workflows/build-push.yaml@main
     with:
       app_name: "my-api"
       system_name: "payment"
