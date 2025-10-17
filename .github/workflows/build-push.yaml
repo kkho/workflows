@@ -77,6 +77,12 @@ on:
       SLACK_WEBHOOK_URL:
         description: "Slack Webhook URL"
         required: false
+      AUTH0_SECRET:
+        description: "Auth0 Secret for secure operations"
+        required: false
+      AUTH0_CLIENT_SECRET:
+        description: "Auth0 Client Secret"
+        required: false
 
 jobs:
   build:
@@ -196,7 +202,11 @@ jobs:
           file: ${{ inputs.dockerfile }}
           tags: ${{ inputs.tags }}
           push: ${{ inputs.push-image }}
-          build-args: ${{ inputs.build-args }}
+          build-args: |
+            ${{ inputs.build-args }}
+          secrets: |
+            AUTH0_SECRET=${{ secrets.AUTH0_SECRET }}
+            AUTH0_CLIENT_SECRET=${{ secrets.AUTH0_CLIENT_SECRET }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: |
             type=gha

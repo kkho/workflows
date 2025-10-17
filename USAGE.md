@@ -145,3 +145,74 @@ jobs:
 ```
 
 This will build your Dockerfile and push it to GitHub Container Registry.
+
+## 🔐 Using Secrets in Docker Builds
+
+The build-push workflow automatically passes secrets to the Docker build process using Docker's secure secret mount feature. This allows you to use secrets during the build without exposing them in the final image layers.
+
+### Example Dockerfile with Secrets
+
+```dockerfile
+FROM node:18-alpine AS base
+
+# Use secrets during build (they won't be in the final image)
+RUN --mount=type=secret,id=GH_TOKEN \
+    --mount=type=secret,id=CODECOV_TOKEN \
+    # Configure npm registry with GitHub token
+    NPM_TOKEN=$(cat /run/secrets/GH_TOKEN) && \
+    echo "//npm.pkg.github.com/:_authToken=${NPM_TOKEN}" > .npmrc && \
+    # Install private packages
+    npm install @myorg/private-package && \
+    # Clean up credentials
+    rm .npmrc
+
+# Production stage
+FROM base AS production
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --only=production
+COPY . .
+RUN npm run build
+
+CMD ["npm", "start"]
+```
+
+### Available Secrets in Build
+
+The following secrets are automatically mounted and available during Docker builds:
+
+- `GH_TOKEN` - GitHub token for accessing private repositories/packages
+- `AZURE_CLIENT_ID` - Azure client ID for authentication
+- `AZURE_TENANT_ID` - Azure tenant ID for authentication  
+- `CODECOV_TOKEN` - Codecov token for uploading coverage
+- `SLACK_WEBHOOK_URL` - Slack webhook URL for notifications
+
+### Security Best Practices
+
+1. **Use secret mounts** - Always use `--mount=type=secret,id=SECRET_NAME` instead of build args
+2. **Clean up credentials** - Remove any credential files after use in the same RUN instruction
+3. **Multi-stage builds** - Use separate stages for operations requiring secrets
+4. **Runtime vs Build time** - Prefer passing secrets at runtime when possible
+
+### Example: Private NPM Package Installation
+
+```dockerfile
+# Stage for installing private packages
+FROM node:18-alpine AS dependencies
+
+RUN --mount=type=secret,id=GH_TOKEN \
+    # Create .npmrc with GitHub token
+    echo "//npm.pkg.github.com/:_authToken=$(cat /run/secrets/GH_TOKEN)" > .npmrc && \
+    # Install all dependencies including private ones
+    npm install && \
+    # Remove .npmrc to avoid secrets in layers
+    rm .npmrc
+
+# Production stage without secrets
+FROM node:18-alpine AS production
+WORKDIR /app
+COPY --from=dependencies /app/node_modules ./node_modules
+COPY . .
+RUN npm run build
+CMD ["npm", "start"]
+```
