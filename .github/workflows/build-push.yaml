@@ -88,6 +88,9 @@ jobs:
   build:
     name: Build, test, publish ${{ inputs.environment }}
     runs-on: ubuntu-latest
+    env:
+      ENVIRONMENT: ${{ inputs.environment }}
+      NODE_ENV: ${{ inputs.environment }}
     steps:
       - name: Check required inputs
         run: |
@@ -208,9 +211,7 @@ jobs:
           tags: ${{ inputs.tags }}
           push: ${{ inputs.push-image }}
           no-cache: ${{ inputs.no-cache || true }}
-          build-args: |
-            ${{ inputs.build-args }}
-            NODE_ENV=development
+          build-args: ${{ inputs.build-args }}
           secrets: |
             AUTH0_SECRET=${{ secrets.AUTH0_SECRET }}
             AUTH0_CLIENT_SECRET=${{ secrets.AUTH0_CLIENT_SECRET }}
