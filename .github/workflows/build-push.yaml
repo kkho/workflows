@@ -61,6 +61,10 @@ on:
         description: "Version of .NET to use"
         required: false
         type: string
+      no-cache:
+        description: "Whether to disable the build cache"
+        required: false
+        type: boolean
     secrets:
       GH_TOKEN:
         description: "GitHub token"
@@ -231,10 +235,10 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: |
             type=gha
-            type=registry,ref=${{ inputs.container_registry }}/${{ github.actor }}/${{ inputs.system_name }}/${{ inputs.app_name }}-${{ inputs.environment }}:buildcache
+            type=registry,ref=${{ inputs.container_registry }}/${{ github.actor }}/${{ inputs.system_name }}/${{ inputs.app_name }}-${{ inputs.environment }}:${{ github.run_id }}
           cache-to: |
             type=gha,mode=max
-            type=registry,ref=${{ inputs.container_registry }}/${{ github.actor }}/${{ inputs.system_name }}/${{ inputs.app_name }}-${{ inputs.environment }}:buildcache,mode=max
+            type=registry,ref=${{ inputs.container_registry }}/${{ github.actor }}/${{ inputs.system_name }}/${{ inputs.app_name }}-${{ inputs.environment }}:${{ github.run_id }},mode=max
           provenance: false
 
   notify:
