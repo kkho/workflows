@@ -42,7 +42,7 @@ on:
       push-image:
         description: "Push the image to the registry"
         required: false
-        default: true
+        default: false
         type: boolean
       build-args:
         description: "Build arguments (key=value, comma-separated)"
@@ -223,7 +223,7 @@ jobs:
           context: ${{ inputs.docker-build-context }}
           file: ${{ inputs.dockerfile }}
           tags: ${{ inputs.tags }}
-          push: ${{ inputs.push-image || false }}
+          push: ${{ inputs.push-image }}
           no-cache: ${{ inputs.no-cache || true }}
           build-args: ${{ inputs.build-args }}
           secrets: |
@@ -235,10 +235,10 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: |
             type=gha
-            type=registry,ref=${{ inputs.container_registry }}/${{ github.actor }}/${{ inputs.system_name }}/${{ inputs.app_name }}-${{ inputs.environment }}:${{ github.run_id }}
+            ${{ inputs.push-image && format('type=registry,ref={0}/{1}/{2}/{3}-{4}:{5}', inputs.container_registry, github.actor, inputs.system_name, inputs.app_name, inputs.environment, github.run_id) || '' }}
           cache-to: |
             type=gha,mode=max
-            type=registry,ref=${{ inputs.container_registry }}/${{ github.actor }}/${{ inputs.system_name }}/${{ inputs.app_name }}-${{ inputs.environment }}:${{ github.run_id }},mode=max
+            ${{ inputs.push-image && format('type=registry,ref={0}/{1}/{2}/{3}-{4}:{5},mode=max', inputs.container_registry, github.actor, inputs.system_name, inputs.app_name, inputs.environment, github.run_id) || '' }}
           provenance: false
 
   notify:
