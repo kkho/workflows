@@ -223,7 +223,7 @@ jobs:
           context: ${{ inputs.docker-build-context }}
           file: ${{ inputs.dockerfile }}
           tags: ${{ inputs.tags }}
-          push: ${{ inputs.push-image }}
+          push: ${{ inputs.push-image || false }}
           no-cache: ${{ inputs.no-cache || true }}
           build-args: ${{ inputs.build-args }}
           secrets: |
