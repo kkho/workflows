@@ -140,13 +140,18 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: "ghcr.io"
-          username: ${{ github.actor }}
+          username: ${{ github.repository_owner }}
           password: ${{ secrets.GH_TOKEN }}
 
       - name: Create image name
         run: |
           IMAGE_NAME="${{ inputs.container_registry }}/${{ inputs.system_name }}/${{ inputs.app_name }}-${{ inputs.environment }}"
           echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
+          echo "🔍 Debug: Repository owner: ${{ github.repository_owner }}"
+          echo "🔍 Debug: Repository: ${{ github.repository }}"
+          echo "🔍 Debug: Actor: ${{ github.actor }}"
+          echo "🔍 Debug: Image name: $IMAGE_NAME"
+          echo "🔍 Debug: Tags: ${{ inputs.tags }}"
         shell: bash
 
       - name: Setup .NET
@@ -202,8 +207,9 @@ jobs:
           file: ${{ inputs.dockerfile }}
           tags: ${{ inputs.tags }}
           push: ${{ inputs.push-image }}
-          build-args: |
-            ${{ inputs.build-args }}
+          no-cache: ${{ inputs.no-cache || true }}
+          build-args: ${{ inputs.build-args }}
+          secrets: |
             AUTH0_SECRET=${{ secrets.AUTH0_SECRET }}
             AUTH0_CLIENT_SECRET=${{ secrets.AUTH0_CLIENT_SECRET }}
           labels: ${{ steps.meta.outputs.labels }}
