@@ -145,7 +145,7 @@ jobs:
 
       - name: Create image name
         run: |
-          IMAGE_NAME="${{ inputs.container_registry }}/${{ inputs.system_name }}/${{ inputs.app_name }}-${{ inputs.environment }}"
+          IMAGE_NAME="${{ inputs.container_registry }}/${{ github.actor }}/${{ inputs.system_name }}/${{ inputs.app_name }}-${{ inputs.environment }}"
           echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
           echo "🔍 Debug: Repository owner: ${{ github.repository_owner }}"
           echo "🔍 Debug: Repository: ${{ github.repository }}"
