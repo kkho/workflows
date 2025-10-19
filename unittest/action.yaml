@@ -17,8 +17,8 @@ inputs:
     description: Path to the solution file
     required: false
     default: './Conferenti.sln'
-  test-projects-path:
-    description: Path to the test projects
+  test-projects:
+    description: List of test projects
     required: false
     default: '**/*Tests/*.csproj'
   collect-coverage:
@@ -42,24 +42,36 @@ runs:
       run: |
         dotnet restore "${{ inputs.solution-path }}"
 
-    - name: Run .NET Tests with Coverage
+    - name: Run unit tests
       shell: bash
       run: |
-        if [[ "${{ inputs.collect-coverage }}" == "true" ]]; then
-          dotnet test "${{ inputs.solution-path }}" \
-            --configuration ${{ inputs.configuration }} \
-            --logger trx \
-            --results-directory ./TestResults \
+        testprojects=$(find . -ipath "*$TEST_PROJECTS")
+        if [[ -z $testprojects ]]; then
+            echo "Unable to find any dotnet projects matching the pattern $TEST_PROJECTS. Set the pattern using the parameter test-projects."
+            exit 0 # TODO: Fail the action if no test projects are found
+        else
+            echo "Running dotnet test on test projects: $testprojects"
+        fi
+
+        for testproject in $testprojects; do
+          if [[ "$TEST_COVERAGE" == 'true' ]]; then
+              dotnet test -l:trx --collect:"XPlat Code Coverage" "$testproject" \
             /p:CollectCoverage=true \
             /p:CoverletOutputFormat=cobertura \
             /p:CoverletOutput=./TestResults/coverage.cobertura.xml \
             /p:Exclude="[*.Tests]*%2c[*.Integration]*"
-        else
-          dotnet test "${{ inputs.solution-path }}" \
-            --configuration ${{ inputs.configuration }} \
-            --logger trx \
-            --results-directory ./TestResults
-        fi
+            fi
+          else
+            dotnet test -l:trx "$testproject" \
+            /p:CollectCoverage=true \
+            /p:CoverletOutputFormat=cobertura \
+            /p:CoverletOutput=./TestResults/coverage.cobertura.xml \
+            /p:Exclude="[*.Tests]*%2c[*.Integration]*"
+          fi
+        done
+      env:
+        TEST_PROJECTS: ${{ inputs.test-projects }}
+        TEST_COVERAGE: ${{ inputs.test-coverage }}
         
     - name: Publish test results
       uses: EnricoMi/publish-unit-test-result-action@3a74b2957438d0b6e2e61d67b05318aa25c9e6c6 # v2.20.0
