@@ -1,0 +1,109 @@
+name: Run .NET tests and collect coverage
+description: Composite action to run .NET tests and collect code coverage
+inputs:
+  checkout:
+    description: 'If `true`, the action will check out the repository. If `false`, the action will assume the repository has already been checked out.'
+    required: false
+    default: 'true'
+  working-directory:
+    description: 'Will run unit tests on projects under this working directory.'
+    required: false
+    default: './'
+  dotnet-version:
+    description: Version of .NET to use
+    required: false
+    default: '9.x'
+  solution-path:
+    description: Path to the solution file
+    required: false
+    default: './Conferenti.sln'
+  test-projects-path:
+    description: Path to the test projects
+    required: false
+    default: '**/*Tests/*.csproj'
+  collect-coverage:
+    description: 'Whether to collect code coverage'
+    required: false
+    default: 'true'
+  coverage-file-path:
+    description: Path to the code coverage file
+    required: false
+    default: './TestResults/coverage.cobertura.xml'
+  
+runs:
+  using: 'composite'
+  steps:
+    - name: Checkout repository
+      if: ${{ inputs.checkout == 'true' }}
+      uses: actions/checkout@v5
+
+    - name: Restore dependencies
+      shell: bash
+      run: |
+        dotnet restore "${{ inputs.solution-path }}"
+
+    - name: Run .NET Tests with Coverage
+      shell: bash
+      run: |
+        if [[ "${{ inputs.collect-coverage }}" == "true" ]]; then
+          dotnet test "${{ inputs.solution-path }}" \
+            --configuration ${{ inputs.configuration }} \
+            --logger trx \
+            --results-directory ./TestResults \
+            /p:CollectCoverage=true \
+            /p:CoverletOutputFormat=cobertura \
+            /p:CoverletOutput=./TestResults/coverage.cobertura.xml \
+            /p:Exclude="[*.Tests]*%2c[*.Integration]*"
+        else
+          dotnet test "${{ inputs.solution-path }}" \
+            --configuration ${{ inputs.configuration }} \
+            --logger trx \
+            --results-directory ./TestResults
+        fi
+        
+    - name: Publish test results
+      uses: EnricoMi/publish-unit-test-result-action@3a74b2957438d0b6e2e61d67b05318aa25c9e6c6 # v2.20.0
+      if: always()
+      with:
+        files: |
+          **/TestResults/*.trx
+          .github/**/TestResults/*.trx
+        check_name: 'Unit Test Results'
+
+    - name: Combine Coverage Reports # This is because one report is produced per project, and we want one result for all of them.
+      if: ${{ inputs.test-coverage == 'true' }}
+      uses: danielpalme/ReportGenerator-GitHub-Action@4c0f60daf67483745c34efdeadd4c4e78a19991e # v5.4.8
+      continue-on-error: true
+      with:
+        reports: '**/*.cobertura.xml' # REQUIRED # The coverage reports that should be parsed (separated by semicolon). Globbing is supported.
+        targetdir: '${{ github.workspace }}' # REQUIRED # The directory where the generated report should be saved.
+        reporttypes: 'Cobertura' # The output formats and scope (separated by semicolon) Values: Badges, Clover, Cobertura, CsvSummary, Html, Html_Dark, Html_Light, Html_BlueRed, HtmlChart, HtmlInline, HtmlInline_AzurePipelines, HtmlInline_AzurePipelines_Dark, HtmlInline_AzurePipelines_Light, HtmlSummary, JsonSummary, Latex, LatexSummary, lcov, MarkdownSummary, MarkdownSummaryGithub, MarkdownDeltaSummary, MHtml, PngChart, SonarQube, TeamCitySummary, TextSummary, TextDeltaSummary, Xml, XmlSummary
+        verbosity: 'Info' # The verbosity level of the log messages. Values: Verbose, Info, Warning, Error, Off
+        title: 'Code Coverage' # Optional title.
+        tag: '${{ github.run_number }}_${{ github.run_id }}' # Optional tag or build version.
+        customSettings: '' # Optional custom settings (separated by semicolon). See: https://github.com/danielpalme/ReportGenerator/wiki/Settings.
+        toolpath: 'reportgeneratortool' # Default directory for installing the dotnet tool.
+
+    - name: Publish Code Coverage Report
+      if: ${{ inputs.test-coverage == 'true' }}
+      uses: irongut/CodeCoverageSummary@f13848964841ca2f7a63343b287493e17dc645de # v1.3.0
+      continue-on-error: true
+      with:
+        filename: 'Cobertura.xml'
+        badge: 'true'
+        fail_below_min: 'false' # just informative for now
+        format: 'markdown'
+        hide_branch_rate: 'false'
+        hide_complexity: 'false'
+        indicators: 'true'
+        output: 'both'
+        thresholds: '50 75'
+
+    - name: Add Coverage PR Comment
+      if: ${{ inputs.test-coverage == 'true' && github.event_name == 'pull_request' }}
+      uses: marocchino/sticky-pull-request-comment@67d0dec7b07ed060a405f9b2a64b8ab319fdd7db # v2.9.2
+      continue-on-error: true
+      with:
+        recreate: 'true'
+        path: 'code-coverage-results.md'
+      

@@ -15,11 +15,6 @@ on:
         description: "Deployment environment (e.g., dev, test, prod)"
         required: true
         type: string
-      solution_name:
-        description: "Solution name"
-        required: false
-        default: "Conferenti.sln"
-        type: string
       docker-build-context:
         description: "Build context"
         required: false
@@ -50,15 +45,6 @@ on:
         type: string
       version:
         description: "Semantic version"
-        required: false
-        type: string
-      coverage_file_path:
-        description: "Path to the code coverage file"
-        required: false
-        default: "./target/site/coverage.cobertura.xml"
-        type: string
-      dotnet_version:
-        description: "Version of .NET to use"
         required: false
         type: string
       no-cache:
@@ -171,25 +157,6 @@ jobs:
           echo "🔍 Debug: Tags: ${{ inputs.tags }}"
         shell: bash
 
-      - name: Setup .NET
-        if: ${{ inputs.dotnet_version }}
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: ${{ inputs.dotnet_version }}
-
-      - name: Run tests and generate coverage
-        if: ${{ inputs.dotnet_version }}
-        run: dotnet test ${{ inputs.solution_name}} --configuration Release /p:CollectCoverage=true /p:CoverletOutputFormat=cobertura
-        shell: bash
-
-      - name: Upload coverage to Codecov
-        if: ${{ inputs.dotnet_version && inputs.coverage_file_path }}
-        uses: codecov/codecov-action@v5
-        with:
-          files: ${{ inputs.coverage_file_path }}
-          fail_ci_if_error: true
-          token: ${{ secrets.CODECOV_TOKEN }}
-
       - name: Set meta_flavor environment variable
         run: |
           if [[ "${{ inputs.environment }}" == "prod" ]]; then
@@ -243,54 +210,19 @@ jobs:
 
   notify:
     name: Send notification
-    runs-on: ubuntu-latest
     needs: [build]
     if: ${{ always() && inputs.environment != '' }}
-    steps:
-      - name: Determine notification status
-        id: status
-        run: |
-          if [[ "${{ needs.build.result }}" == "success" ]]; then
-            echo "status=✅ Success" >> $GITHUB_OUTPUT
-            echo "color=good" >> $GITHUB_OUTPUT
-          else
-            echo "status=❌ Failed" >> $GITHUB_OUTPUT
-            echo "color=danger" >> $GITHUB_OUTPUT
-          fi
-        shell: bash
-
-      - name: Send Slack notification
-        if: ${{ inputs.environment != '' }}
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-        run: |
-          if [ -z "$SLACK_WEBHOOK_URL" ]; then
-            echo "Slack webhook URL not provided, skipping notification"
-            exit 0
-          fi
-
-          MESSAGE="Docker image build for ${{ inputs.app_name }} in ${{ inputs.environment }} completed.
-          Status: ${{ steps.status.outputs.status }}
-          Repository: ${{ github.repository }}
-          Commit: ${{ github.sha }}"
-
-          PAYLOAD=$(cat <<EOF
-          {
-            "channel": "#build-${{ inputs.environment }}",
-            "username": "GitHub Actions",
-            "icon_emoji": ":github:",
-            "attachments": [
-              {
-                "color": "${{ steps.status.outputs.color }}",
-                "text": "${MESSAGE}",
-                "mrkdwn_in": ["text"]
-              }
-            ]
-          }
-          EOF
-          )
-
-          curl -X POST -H 'Content-type: application/json' \
-            --data "${PAYLOAD}" \
-            "$SLACK_WEBHOOK_URL"
-        shell: bash
+    uses: kkho/workflows/.github/workflows/slack-message.yaml@main
+    with:
+      channel: "#build-${{ inputs.environment }}"
+      message: |
+        Docker image build for ${{ inputs.app_name }} in ${{ inputs.environment }} completed.
+        Status: ${{ needs.build.result == 'success' && '✅ Success' || '❌ Failed' }}
+        Repository: ${{ github.repository }}
+        Commit: ${{ github.sha }}
+        Url: [View Run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+      username: "GitHub Actions"
+      icon_emoji: ":github:"
+      color: ${{ needs.build.result == 'success' && 'good' || 'danger' }}
+    secrets:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

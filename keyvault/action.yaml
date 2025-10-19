@@ -1,0 +1,63 @@
+name: KeyVault
+description: "Composite action to interact with Azure Key Vault"
+inputs:
+  keyvault-name:
+    description: "Name of the Azure Key Vault"
+    required: true
+  secret-names:
+    description: "Comma-separated list of secret names to retrieve"
+    required: true
+  environment:
+    description: "Deployment environment (e.g., dev, test, prod)"
+    required: true
+    default: "dev"
+  azure-credentials:
+    description: "Azure service principal credentials JSON"
+    required: true
+  azure-client-id:
+    description: "Azure Client ID (alternative to credentials)"
+    required: false
+  azure-tenant-id:
+    description: "Azure Tenant ID (alternative to credentials)"
+    required: false
+  azure-subscription-id:
+    description: "Azure Subscription ID (for OIDC)"
+    required: false
+
+runs:
+  using: "composite"
+  steps:
+    - name: Azure Login (Service Principal)
+      if: ${{ inputs.azure-credentials != '' }}
+      uses: azure/login@v2
+      with:
+        creds: ${{ inputs.azure-credentials }}
+
+    - name: Azure Login (OIDC)
+      if: ${{ inputs.azure-client-id != '' && inputs.azure-tenant-id != '' }}
+      uses: azure/login@v2
+      with:
+        client-id: ${{ inputs.azure-client-id }}
+        tenant-id: ${{ inputs.azure-tenant-id }}
+        subscription-id: ${{ inputs.azure-subscription-id }}
+
+    - name: Retrieve Secrets from Key Vault
+      shell: bash
+      run: |
+        IFS=',' read -ra SECRET_ARRAY <<< "${{ inputs.secret-names }}"
+        for SECRET_NAME in "${SECRET_ARRAY[@]}"; do
+          
+          SECRET_VALUE=$(az keyvault secret show \
+            --name "$SECRET_NAME" \
+            --vault-name "${{ inputs.keyvault-name }}" \
+            --query value -o tsv 2>/dev/null || echo "")
+          
+          if [[ -n "$SECRET_VALUE" ]]; then
+            # Mask the secret value in logs
+            echo "::add-mask::$SECRET_VALUE"
+            # Set as output (modern syntax)
+            echo "$SECRET_NAME=$SECRET_VALUE" >> $GITHUB_OUTPUT
+          else
+            exit 1
+          fi
+        done

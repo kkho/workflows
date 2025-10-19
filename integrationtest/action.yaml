@@ -1,0 +1,85 @@
+name: Integration test
+description: 'Composite action to run integration tests'
+inputs:
+  checkout:
+    description: 'If `true`, the action will check out the repository. If `false`, the action will assume the repository has already been checked out.'
+    required: false
+    default: 'true'
+  system_name:
+    description: 'The system name for the integration test'
+    required: true
+  test-projects:
+    description: 'Pattern to use to find test projects.'
+    required: false
+    default: 'integration*test*csproj'
+  secret-names:
+    description: "Comma-separated list of secret names to retrieve"
+    required: false
+  environment:
+    description: "Deployment environment (e.g., dev, test, prod)"
+    required: true
+    default: "dev"
+  azure-credentials:
+    description: "Azure service principal credentials JSON"
+    required: true
+  azure-client-id:
+    description: "Azure Client ID (alternative to credentials)"
+    required: false
+  azure-tenant-id:
+    description: "Azure Tenant ID (alternative to credentials)"
+    required: false
+  azure-subscription-id:
+    description: "Azure Subscription ID (for OIDC)"
+    required: false
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Checkout repository
+      if: ${{ inputs.checkout == 'true' }}
+      uses: actions/checkout@v5
+
+    - name: Retrieve Secrets from Key Vault
+      if: ${{ inputs.secret-names != '' }}
+      uses: kkho/workflows/keyvault@main
+      with:
+        keyvault-name: "${{ inputs.system_name }}-kv-${{ inputs.environment }}"
+        secret-names: ${{ inputs.secret-names }}
+        environment: ${{ inputs.environment }}
+        azure-credentials: ${{ inputs.azure-credentials }}
+        azure-client-id: ${{ inputs.azure-client-id }}
+        azure-tenant-id: ${{ inputs.azure-tenant-id }}
+        azure-subscription-id: ${{ inputs.azure-subscription-id }}
+
+    - name: Restore .NET tools
+      shell: bash
+      run: dotnet tool restore
+
+    - name: Run Integration Tests
+      shell: bash
+      run: |
+        echo "Running integration tests for system: ${{ inputs.system_name }} in environment: ${{ inputs.environment }}"
+        # Find all test projects matching the pattern
+        TEST_PROJECTS=$(find . -type f -name "${{ inputs.test-projects }}")
+        if [ -z "$TEST_PROJECTS" ]; then
+          echo "No test projects found matching pattern: ${{ inputs.test-projects }}"
+          exit 1
+        fi
+
+        for PROJECT in $TEST_PROJECTS; do
+          echo "Running tests in project: $PROJECT"
+          dotnet test "$PROJECT" --configuration Release --logger trx --results-directory ./TestResults
+        done
+
+        echo "All integration tests passed successfully."
+      working-directory: ${{ inputs.working-directory }}
+
+    - name: Publish test results
+      uses: EnricoMi/publish-unit-test-result-action@3a74b2957438d0b6e2e61d67b05318aa25c9e6c6 # v2.20.0
+      if: always()
+      with:
+        files: |
+          **/TestResults/*.trx
+          .github/**/TestResults/*.trx
+        check_name: 'Integration Test Results'
+
