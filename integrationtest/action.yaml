@@ -19,6 +19,7 @@ inputs:
     description: "Deployment environment (e.g., dev, test, prod)"
     required: true
     default: "dev"
+    
   azure-credentials:
     description: "Azure service principal credentials JSON"
     required: true
