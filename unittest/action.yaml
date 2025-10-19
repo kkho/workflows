@@ -55,17 +55,9 @@ runs:
 
         for testproject in $testprojects; do
           if [[ "$TEST_COVERAGE" == 'true' ]]; then
-              dotnet test -l:trx --collect:"XPlat Code Coverage" "$testproject" \
-            /p:CollectCoverage=true \
-            /p:CoverletOutputFormat=cobertura \
-            /p:CoverletOutput=./TestResults/coverage.cobertura.xml \
-            /p:Exclude="[*.Tests]*%2c[*.Integration]*"
-            fi
+            dotnet test -l:trx --collect:"XPlat Code Coverage" "$testproject"
           else
             dotnet test -l:trx "$testproject" \
-            /p:CollectCoverage=true \
-            /p:CoverletOutputFormat=cobertura \
-            /p:CoverletOutput=./TestResults/coverage.cobertura.xml \
             /p:Exclude="[*.Tests]*%2c[*.Integration]*"
           fi
         done
