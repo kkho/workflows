@@ -55,7 +55,7 @@ runs:
 
         for testproject in $testprojects; do
           if [[ "$TEST_COVERAGE" == 'true' ]]; then
-            dotnet test -l:trx --collect:"XPlat Code Coverage" "$testproject"
+            dotnet test -l:trx --collect:"XPlat Code Coverage" "$testproject" /p:Exclude="[*.Tests]*%2c[*.Integration]*"
           else
             dotnet test -l:trx "$testproject" \
             /p:Exclude="[*.Tests]*%2c[*.Integration]*"
