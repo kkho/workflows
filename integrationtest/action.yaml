@@ -19,7 +19,7 @@ inputs:
     description: "Deployment environment (e.g., dev, test, prod)"
     required: true
     default: "dev"
-    
+
   azure-credentials:
     description: "Azure service principal credentials JSON"
     required: true
@@ -52,9 +52,10 @@ runs:
         azure-tenant-id: ${{ inputs.azure-tenant-id }}
         azure-subscription-id: ${{ inputs.azure-subscription-id }}
 
-    - name: Restore .NET tools
+    - name: Restore dependencies
       shell: bash
-      run: dotnet tool restore
+      run: |
+        dotnet restore "${{ inputs.solution-path }}"
 
     - name: Run Integration Tests
       shell: bash
