@@ -45,13 +45,20 @@ runs:
     - name: Run unit tests
       shell: bash
       run: |
-        testprojects=$(find . -ipath "*$TEST_PROJECTS")
-        if [[ -z $testprojects ]]; then
+        all_testprojects=$(find . -ipath "*$TEST_PROJECTS")
+        if [[ -z $all_testprojects ]]; then
             echo "Unable to find any dotnet projects matching the pattern $TEST_PROJECTS. Set the pattern using the parameter test-projects."
             exit 0 # TODO: Fail the action if no test projects are found
         else
-            echo "Running dotnet test on test projects: $testprojects"
+            echo "Running dotnet test on test projects: $all_testprojects"
         fi
+
+        testprojects=""
+        for project in $all_testprojects; do
+          if [[ ! "$project" =~ Integration\.csproj$ ]]; then
+            testprojects="$testprojects $project"
+          fi
+        done
 
         for testproject in $testprojects; do
           if [[ "$TEST_COVERAGE" == 'true' ]]; then
