@@ -56,12 +56,10 @@ runs:
         echo "$all_testprojects"
         
         testprojects=""
-        excluded_count=0
         for project in $all_testprojects; do
           # Filter out projects containing "Integration" in the filename
           if [[ "$project" =~ Integration ]]; then
-            echo "  🚫 Excluding: $project"
-            ((excluded_count++))
+            echo "Excluding: $project"
           else
             testprojects="$testprojects $project"
           fi
@@ -69,13 +67,6 @@ runs:
         
         testprojects=$(echo "$testprojects" | xargs)
         
-        echo ""
-        echo "✅ Unit test projects to run ($excluded_count excluded):"
-        for project in $testprojects; do
-          echo "  📦 $project"
-        done
-        echo ""
-
         if [[ -z "$testprojects" ]]; then
           echo "No unit test projects found after filtering out Integration tests"
           exit 0
