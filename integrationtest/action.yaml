@@ -8,6 +8,9 @@ inputs:
   system_name:
     description: 'The system name for the integration test'
     required: true
+  solution-path:
+    description: "The path for solution"
+    required: true
   test-projects:
     description: 'Pattern to use to find test projects.'
     required: false
