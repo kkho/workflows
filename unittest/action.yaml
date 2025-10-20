@@ -45,22 +45,44 @@ runs:
     - name: Run unit tests
       shell: bash
       run: |
+        echo "🔍 Searching for test projects: $TEST_PROJECTS"
         all_testprojects=$(find . -ipath "*$TEST_PROJECTS")
+        
         if [[ -z $all_testprojects ]]; then
-            echo "Unable to find any dotnet projects matching the pattern $TEST_PROJECTS. Set the pattern using the parameter test-projects."
-            exit 0 # TODO: Fail the action if no test projects are found
-        else
-            echo "Running dotnet test on test projects: $all_testprojects"
+            echo "Unable to find any dotnet projects matching the pattern $TEST_PROJECTS"
+            exit 0
         fi
 
+        echo "$all_testprojects"
+        
         testprojects=""
+        excluded_count=0
         for project in $all_testprojects; do
-          if [[ ! "$project" =~ Integration\.csproj$ ]]; then
+          # Filter out projects containing "Integration" in the filename
+          if [[ "$project" =~ Integration ]]; then
+            echo "  🚫 Excluding: $project"
+            ((excluded_count++))
+          else
             testprojects="$testprojects $project"
           fi
         done
+        
+        testprojects=$(echo "$testprojects" | xargs)
+        
+        echo ""
+        echo "✅ Unit test projects to run ($excluded_count excluded):"
+        for project in $testprojects; do
+          echo "  📦 $project"
+        done
+        echo ""
+
+        if [[ -z "$testprojects" ]]; then
+          echo "No unit test projects found after filtering out Integration tests"
+          exit 0
+        fi
 
         for testproject in $testprojects; do
+          echo "Running tests: $testproject"
           if [[ "$TEST_COVERAGE" == 'true' ]]; then
             dotnet test -l:trx --collect:"XPlat Code Coverage" "$testproject" /p:Exclude="[*.Tests]*%2c[*.Integration]*"
           else
