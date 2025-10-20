@@ -22,7 +22,7 @@ inputs:
 
   azure-credentials:
     description: "Azure service principal credentials JSON"
-    required: true
+    required: false
   azure-client-id:
     description: "Azure Client ID (alternative to credentials)"
     required: false
